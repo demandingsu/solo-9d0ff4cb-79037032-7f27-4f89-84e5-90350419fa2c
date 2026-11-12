@@ -8,6 +8,7 @@ services:
       - tender-data:/data
       # 样例站点同时挂载到容器内，便于在宿主机直接查看离线 HTML
       - ./sample_site:/app/sample_site:ro
+      - ./sample_site_b:/app/sample_site_b:ro
     environment:
       DATA_DIR: /data
       REQUEST_TIMEOUT: "10"

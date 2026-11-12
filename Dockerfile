@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY sample_site ./sample_site
+COPY sample_site_b ./sample_site_b
 
 RUN mkdir -p /data
 VOLUME ["/data"]

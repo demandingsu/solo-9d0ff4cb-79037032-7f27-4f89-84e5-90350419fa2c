@@ -1,6 +1,8 @@
 """FastAPI 入口：采集与查询接口 + 离线样例静态站点。"""
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -8,10 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from . import config
 from .chain import build_all, build_tender_detail, group_by_tender
 from .crawler import CrawlError, Crawler
+from .crosscheck import cross_check
 from .models import (
     CollectRequest,
     CollectResponse,
     CollectResult,
+    CrossCheckRequest,
+    CrossCheckResponse,
     TenderDetail,
     TenderSummary,
 )
@@ -66,6 +71,31 @@ async def collect(req: CollectRequest) -> CollectResponse:
     )
 
 
+@app.post("/api/crosscheck", response_model=CrossCheckResponse)
+async def crosscheck(req: CrossCheckRequest) -> CrossCheckResponse:
+    """双来源公告一致性核对。
+
+    分别容错采集两个目录（分页/详情失败不中断），按招标编号+公告编号配对、
+    按发布时间形成版本链，比对公告类型/截止时间/依据/撤回关系。
+    任一侧失败时保留已知对照，受影响标段与配对标记 needs_verification。
+    """
+    crawler = Crawler()
+    url_a, url_b = str(req.source_a), str(req.source_b)
+    result_a, result_b = await asyncio.gather(
+        crawler.collect_partial(url_a),
+        crawler.collect_partial(url_b),
+    )
+    return cross_check(
+        source_a=result_a,
+        source_b=result_b,
+        catalog_a=url_a,
+        catalog_b=url_b,
+        name_a=req.source_a_name,
+        name_b=req.source_b_name,
+        checked_at=Crawler.now_iso(),
+    )
+
+
 async def _require_data() -> CollectResult:
     result = await store.load()
     if result is None:
@@ -115,6 +145,13 @@ if config.SAMPLE_DIR.exists():
         "/sample",
         StaticFiles(directory=str(config.SAMPLE_DIR), html=True),
         name="sample",
+    )
+
+if config.SAMPLE_B_DIR.exists():
+    app.mount(
+        "/sample-b",
+        StaticFiles(directory=str(config.SAMPLE_B_DIR), html=True),
+        name="sample-b",
     )
 
 

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -17,9 +19,21 @@ from .models import Announcement, AnnouncementType
 
 VALID_TYPES = {t.value for t in AnnouncementType}
 
+# 目录条目文本中的招标编号（如 ZG-2026-001），用于详情页抓取失败时归属标段
+_TENDER_CODE_RE = re.compile(r"[A-Za-z]{1,8}-\d{2,6}-\d{2,6}")
+
 
 class ParseError(Exception):
     """页面结构不符合约定时抛出。"""
+
+
+@dataclass
+class CatalogEntry:
+    """目录页单条详情入口。"""
+
+    url: str
+    text: str
+    tender_code: Optional[str] = None
 
 
 def _meta_table(soup: BeautifulSoup) -> dict[str, str]:
@@ -74,17 +88,24 @@ def parse_detail(html_text: str, url: str) -> Announcement:
     )
 
 
-def parse_catalog(html_text: str, url: str) -> tuple[list[str], Optional[str]]:
-    """返回 (详情页绝对 URL 列表, 下一页绝对 URL 或 None)。"""
+def parse_catalog_entries(html_text: str, url: str) -> tuple[list[CatalogEntry], Optional[str]]:
+    """解析目录页，返回 (带条目文本/招标编号的详情入口列表, 下一页绝对 URL 或 None)。"""
     soup = BeautifulSoup(html_text, "html.parser")
     catalog = soup.find("ul", class_="catalog")
     if catalog is None:
         raise ParseError(f"目录页 {url} 缺少 ul.catalog")
 
-    detail_urls: list[str] = []
+    entries: list[CatalogEntry] = []
     for a in catalog.find_all("a", href=True):
-        detail_urls.append(urljoin(url, a["href"]))
-    if not detail_urls:
+        abs_url = urljoin(url, a["href"])
+        text = a.get_text(strip=True)
+        li = a.find_parent("li")
+        context = li.get_text(" ", strip=True) if li is not None else text
+        match = _TENDER_CODE_RE.search(context)
+        entries.append(
+            CatalogEntry(url=abs_url, text=text, tender_code=match.group(0) if match else None)
+        )
+    if not entries:
         raise ParseError(f"目录页 {url} 未包含任何详情链接")
 
     next_page = None
@@ -92,4 +113,10 @@ def parse_catalog(html_text: str, url: str) -> tuple[list[str], Optional[str]]:
     # rel 可能被解析为列表，next 链接以 rel="next" 标识
     if nxt is not None and "next" in (nxt.get("rel") or []):
         next_page = urljoin(url, nxt["href"])
-    return detail_urls, next_page
+    return entries, next_page
+
+
+def parse_catalog(html_text: str, url: str) -> tuple[list[str], Optional[str]]:
+    """返回 (详情页绝对 URL 列表, 下一页绝对 URL 或 None)。"""
+    entries, next_page = parse_catalog_entries(html_text, url)
+    return [e.url for e in entries], next_page

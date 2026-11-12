@@ -16,3 +16,4 @@ USER_AGENT = os.getenv("USER_AGENT", "tender-collector/1.0 (+local)")
 
 # 离线样例目录（由 API 静态挂载）
 SAMPLE_DIR = BASE_DIR / "sample_site"
+SAMPLE_B_DIR = BASE_DIR / "sample_site_b"

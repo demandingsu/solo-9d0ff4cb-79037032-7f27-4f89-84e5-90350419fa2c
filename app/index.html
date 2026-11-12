@@ -16,15 +16,19 @@ li { margin: 6px 0; }
   <li><code>POST /api/collect</code> — 传入 <code>{"catalog_url": "..."}</code> 触发采集，成功后整体替换旧结果，失败保留旧结果</li>
   <li><code>GET /api/tenders</code> — 各标段当前投标截止时间汇总（冲突标段 status=conflict）</li>
   <li><code>GET /api/tenders/{招标编号}</code> — 单标段有效公告链、失效原因与来源链接</li>
+  <li><code>POST /api/crosscheck</code> — 双来源一致性核对：传入两个招标网站的目录 URL，按公告编号+招标编号配对并形成版本链，输出一致/单方缺失/内容冲突/无法判定，含冲突字段与双方来源链接</li>
   <li><code>GET /api/raw</code> — 最近一次采集的原始公告数据</li>
   <li><code>GET /docs</code> — Swagger 交互文档</li>
-  <li><a href="/sample/index.html">离线分页 HTML 公告样例</a>（<code>/sample</code>，纯静态无外部依赖）</li>
+  <li><a href="/sample/index.html">离线样例站点 A</a>（<code>/sample</code>，纯静态无外部依赖）</li>
+  <li><a href="/sample-b/index.html">离线样例站点 B</a>（<code>/sample-b</code>，双来源核对专用，含冲突与单方缺失场景）</li>
 </ul>
 <h2>典型流程</h2>
 <ol>
-  <li>打开 <a href="/sample/index.html">样例目录</a>，复制目录第一页 URL</li>
-  <li>调用 <code>POST /api/collect</code> 采集</li>
-  <li>调用 <code>GET /api/tenders</code> 核对截止时间；冲突标段进入详情查看冲突公告来源</li>
+  <li>打开 <a href="/sample/index.html">样例目录 A</a> 与 <a href="/sample-b/index.html">样例目录 B</a>，分别复制目录第一页 URL</li>
+  <li>调用 <code>POST /api/crosscheck</code>，请求体：
+    <code>{"source_a": ".../sample/catalog/page_1.html", "source_b": ".../sample-b/catalog/page_1.html"}</code></li>
+  <li>按 <code>tenders[].pairs[]</code> 核对配对状态；<code>needs_verification=true</code> 表示受采集失败影响需人工核实，<code>field_conflicts</code> 给出冲突字段与双方取值</li>
+  <li>单站采集场景仍可调用 <code>POST /api/collect</code>，再通过 <code>GET /api/tenders</code> 核对截止时间</li>
 </ol>
 </body>
 </html>
